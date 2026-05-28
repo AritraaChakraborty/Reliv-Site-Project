@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ArrowUpRight, Heart, ShieldCheck, Sparkles, Clock, QrCode, Smartphone, Stethoscope, Activity, Pill } from "lucide-react";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
-import kiosk from "@/assets/reliv-kiosk.png";
+import kiosk from "@/assets/reliv-kiosk.jpg";
 import person from "@/assets/reliv-person.png";
 
 export const Route = createFileRoute("/")({

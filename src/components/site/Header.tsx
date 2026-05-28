@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Menu, X } from "lucide-react";
 import { useState } from "react";
-import logo from "@/assets/reliv-logo.png";
+import logo from "@/assets/reliv-logo.jpg";
 
 const nav = [
   { label: "How to Use", to: "/", hash: "how" },
