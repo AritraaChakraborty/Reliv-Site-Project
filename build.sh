@@ -7,34 +7,35 @@ bun run build
 # Create Vercel output structure
 mkdir -p .vercel/output/functions/index.func
 
-# Create Node.js wrapper for the TanStack Start app
+# Create Node.js wrapper for the TanStack Start app (ES Module)
 cat > .vercel/output/functions/index.func/index.js << 'WRAPPER_EOF'
-const mod = require('./server.js');
-const server = mod.default;
+import server from './server.js';
 
-module.exports = async (req, res) => {
+export default async (req, res) => {
   try {
     // Build full URL
     const protocol = req.headers['x-forwarded-proto'] || 'http';
     const host = req.headers['x-forwarded-host'] || req.headers.host;
     const url = new URL(req.url || '/', `${protocol}://${host}`);
     
-    // Create Fetch API request
+    // Build request body if needed
     let body = undefined;
     if (req.method !== 'GET' && req.method !== 'HEAD') {
+      // For POST/PUT/PATCH, read the body
       body = req;
     }
     
+    // Create Fetch API request
     const request = new Request(url.toString(), {
       method: req.method,
       headers: req.headers,
       body: body,
     });
     
-    // Call the handler
-    const response = await server.fetch(request, {}, {});
+    // Call the server handler
+    const response = await server.fetch(request);
     
-    // Set status
+    // Set response status
     res.statusCode = response.status;
     
     // Copy headers
@@ -46,10 +47,10 @@ module.exports = async (req, res) => {
     const buffer = await response.arrayBuffer();
     res.end(Buffer.from(buffer));
   } catch (error) {
-    console.error('Error handling request:', error);
+    console.error('[v0] Error handling request:', error);
     res.statusCode = 500;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.end('<html><body><h1>500 Internal Server Error</h1></body></html>');
+    res.end('<html><body><h1>500 Internal Server Error</h1><p>' + error.message + '</p></body></html>');
   }
 };
 WRAPPER_EOF
@@ -59,12 +60,20 @@ cp dist/server/server.js .vercel/output/functions/index.func/
 cp -r dist/server/assets .vercel/output/functions/index.func/
 cp -r dist/client .vercel/output/static
 
-# Create function configuration
+# Create function configuration with ESM support
 cat > .vercel/output/functions/index.func/.vc-config.json << 'EOF'
 {
   "runtime": "nodejs20.x",
   "handler": "index.js",
-  "launcherType": "Nodejs"
+  "launcherType": "Nodejs",
+  "useMiddlewareOnEdgeRuntime": false
+}
+EOF
+
+# Create package.json for the function (ES Module)
+cat > .vercel/output/functions/index.func/package.json << 'EOF'
+{
+  "type": "module"
 }
 EOF
 
