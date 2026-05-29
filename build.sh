@@ -9,14 +9,10 @@ mkdir -p .vercel/output/functions/index.func
 
 # Create a proper Node.js HTTP server wrapper for Nitro
 cat > .vercel/output/functions/index.func/index.cjs << 'WRAPPER_EOF'
-const http = require('http');
-
-// Async initialization and server setup
-async function startServer(req, res) {
+async function handler(req, res) {
   try {
     // Import the Nitro server (ES module)
-    const serverModule = await import('./server.js');
-    const server = serverModule.default;
+    const { default: server } = await import('./server.js');
     
     // Build the full URL
     const protocol = req.headers['x-forwarded-proto'] || 'http';
@@ -27,15 +23,13 @@ async function startServer(req, res) {
     const fetchReq = new Request(url.toString(), {
       method: req.method,
       headers: req.headers,
-      duplex: 'half',
-      body: req.method !== 'GET' && req.method !== 'HEAD' ? req : undefined,
     });
     
     // Call the Nitro fetch handler
     const response = await server.fetch(fetchReq);
     
     // Set the response status
-    res.writeHead(response.status);
+    res.statusCode = response.status;
     
     // Copy response headers
     response.headers.forEach((value, name) => {
@@ -47,12 +41,13 @@ async function startServer(req, res) {
     res.end(Buffer.from(buffer));
   } catch (error) {
     console.error('[v0] Error in server:', error);
-    res.writeHead(500, { 'Content-Type': 'text/plain' });
+    res.statusCode = 500;
+    res.setHeader('Content-Type', 'text/plain');
     res.end('Internal Server Error: ' + error.message);
   }
 }
 
-module.exports = startServer;
+module.exports = handler;
 WRAPPER_EOF
 
 # Copy server files to Vercel function
