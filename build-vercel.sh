@@ -21,24 +21,12 @@ cp -r dist/server/_libs .vercel/output/functions/index.func/
 cp -r dist/server/_ssr .vercel/output/functions/index.func/
 cp -r dist/server/_chunks .vercel/output/functions/index.func/ 2>/dev/null || true
 
-# Create a proper Vercel-compatible handler that loads the Cloudflare module
-cat > .vercel/output/functions/index.func/index.js << 'HANDLER_EOF'
-let server = null;
+# Create a proper Vercel-compatible handler using .mjs
+cat > .vercel/output/functions/index.func/index.mjs << 'HANDLER_EOF'
+import server from './server.mjs';
 
-async function initServer() {
-  if (!server) {
-    // Import the Nitro server from the Cloudflare module
-    const mod = await import('./server.mjs');
-    server = mod.default;
-  }
-  return server;
-}
-
-// Handler for Vercel Serverless Functions
-module.exports = async (req, res) => {
+export default async (req, res) => {
   try {
-    const srv = await initServer();
-    
     // Build full request URL
     const protocol = req.headers['x-forwarded-proto'] || 'http';
     const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
@@ -51,7 +39,7 @@ module.exports = async (req, res) => {
     });
     
     // Call Nitro server
-    const response = await srv.fetch(request);
+    const response = await server.fetch(request);
     
     // Set response status and headers
     res.statusCode = response.status;
@@ -75,7 +63,7 @@ HANDLER_EOF
 cat > .vercel/output/functions/index.func/.vc-config.json << 'CONFIG_EOF'
 {
   "runtime": "nodejs20.x",
-  "handler": "index.js",
+  "handler": "index.mjs",
   "launcherType": "Nodejs"
 }
 CONFIG_EOF
