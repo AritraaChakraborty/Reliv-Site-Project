@@ -11,13 +11,19 @@ mkdir -p .vercel/output/functions/index.func
 cat > .vercel/output/functions/index.func/index.cjs << 'WRAPPER_EOF'
 async function handler(req, res) {
   try {
+    console.log(`[v0] Request: ${req.method} ${req.url}`);
+    
     // Import the Nitro server (ES module)
-    const { default: server } = await import('./server.js');
+    console.log('[v0] Importing server...');
+    const serverModule = await import('./server.js');
+    const server = serverModule.default;
+    console.log('[v0] Server imported successfully');
     
     // Build the full URL
     const protocol = req.headers['x-forwarded-proto'] || 'http';
     const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
     const url = new URL(req.url || '/', `${protocol}://${host}`);
+    console.log(`[v0] URL: ${url.toString()}`);
     
     // Create Fetch API request from Node.js request
     const fetchReq = new Request(url.toString(), {
@@ -26,7 +32,9 @@ async function handler(req, res) {
     });
     
     // Call the Nitro fetch handler
+    console.log('[v0] Calling server.fetch...');
     const response = await server.fetch(fetchReq);
+    console.log(`[v0] Response status: ${response.status}`);
     
     // Set the response status
     res.statusCode = response.status;
@@ -64,8 +72,11 @@ cat > .vercel/output/functions/index.func/.vc-config.json << 'EOF'
 }
 EOF
 
-# Remove any package.json to avoid conflicts
-rm -f .vercel/output/functions/index.func/package.json
+# Create package.json to enable ES module imports in CommonJS
+cat > .vercel/output/functions/index.func/package.json << 'EOF'
+{
+}
+EOF
 
 # Create routes configuration
 cat > .vercel/output/config.json << 'EOF'
