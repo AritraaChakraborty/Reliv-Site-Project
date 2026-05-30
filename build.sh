@@ -7,34 +7,25 @@ bun run build
 # Create Vercel output structure
 mkdir -p .vercel/output/functions/index.func
 
-# Create a proper Node.js HTTP server wrapper for Nitro
-cat > .vercel/output/functions/index.func/index.cjs << 'WRAPPER_EOF'
-async function handler(req, res) {
+# Create a simple Node.js wrapper using .mjs with named export that Vercel expects
+cat > .vercel/output/functions/index.func/index.mjs << 'WRAPPER_EOF'
+import serverModule from './server.js';
+
+export default async function handler(req, res) {
   try {
-    console.log(`[v0] Request: ${req.method} ${req.url}`);
-    
-    // Import the Nitro server (ES module)
-    console.log('[v0] Importing server...');
-    const serverModule = await import('./server.js');
-    const server = serverModule.default;
-    console.log('[v0] Server imported successfully');
-    
     // Build the full URL
     const protocol = req.headers['x-forwarded-proto'] || 'http';
     const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
     const url = new URL(req.url || '/', `${protocol}://${host}`);
-    console.log(`[v0] URL: ${url.toString()}`);
     
-    // Create Fetch API request from Node.js request
-    const fetchReq = new Request(url.toString(), {
+    // Create Fetch API request
+    const request = new Request(url.toString(), {
       method: req.method,
       headers: req.headers,
     });
     
-    // Call the Nitro fetch handler
-    console.log('[v0] Calling server.fetch...');
-    const response = await server.fetch(fetchReq);
-    console.log(`[v0] Response status: ${response.status}`);
+    // Call the Nitro server
+    const response = await serverModule.fetch(request);
     
     // Set the response status
     res.statusCode = response.status;
@@ -48,14 +39,12 @@ async function handler(req, res) {
     const buffer = await response.arrayBuffer();
     res.end(Buffer.from(buffer));
   } catch (error) {
-    console.error('[v0] Error in server:', error);
+    console.error('[v0] Error:', error);
     res.statusCode = 500;
     res.setHeader('Content-Type', 'text/plain');
-    res.end('Internal Server Error: ' + error.message);
+    res.end('Internal Server Error');
   }
 }
-
-module.exports = handler;
 WRAPPER_EOF
 
 # Copy server files to Vercel function
@@ -67,14 +56,8 @@ cp -r dist/client .vercel/output/static
 cat > .vercel/output/functions/index.func/.vc-config.json << 'EOF'
 {
   "runtime": "nodejs20.x",
-  "handler": "index.cjs",
+  "handler": "index.mjs",
   "launcherType": "Nodejs"
-}
-EOF
-
-# Create package.json to enable ES module imports in CommonJS
-cat > .vercel/output/functions/index.func/package.json << 'EOF'
-{
 }
 EOF
 
