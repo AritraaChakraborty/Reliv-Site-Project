@@ -7,44 +7,40 @@ bun run build
 # Create Vercel output structure
 mkdir -p .vercel/output/functions/index.func
 
-# Create a simple Node.js wrapper using .mjs with named export that Vercel expects
-cat > .vercel/output/functions/index.func/index.mjs << 'WRAPPER_EOF'
-import serverModule from './server.js';
-
-export default async function handler(req, res) {
-  try {
-    // Build the full URL
-    const protocol = req.headers['x-forwarded-proto'] || 'http';
-    const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
-    const url = new URL(req.url || '/', `${protocol}://${host}`);
-    
-    // Create Fetch API request
-    const request = new Request(url.toString(), {
-      method: req.method,
-      headers: req.headers,
-    });
-    
-    // Call the Nitro server
-    const response = await serverModule.fetch(request);
-    
-    // Set the response status
-    res.statusCode = response.status;
-    
-    // Copy response headers
-    response.headers.forEach((value, name) => {
-      res.setHeader(name, value);
-    });
-    
-    // Send the response body
-    const buffer = await response.arrayBuffer();
-    res.end(Buffer.from(buffer));
-  } catch (error) {
-    console.error('[v0] Error:', error);
-    res.statusCode = 500;
-    res.setHeader('Content-Type', 'text/plain');
-    res.end('Internal Server Error');
-  }
-}
+# Create a CommonJS wrapper that works with Vercel's Node.js runtime
+# This uses the proper module.exports format Vercel expects
+cat > .vercel/output/functions/index.func/index.js << 'WRAPPER_EOF'
+(async () => {
+  const server = await import('./server.js');
+  
+  module.exports = async (req, res) => {
+    try {
+      const protocol = req.headers['x-forwarded-proto'] || 'http';
+      const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
+      const url = new URL(req.url || '/', `${protocol}://${host}`);
+      
+      const request = new Request(url.toString(), {
+        method: req.method,
+        headers: req.headers,
+      });
+      
+      const response = await server.default.fetch(request);
+      
+      res.statusCode = response.status;
+      response.headers.forEach((value, name) => {
+        res.setHeader(name, value);
+      });
+      
+      const buffer = await response.arrayBuffer();
+      res.end(Buffer.from(buffer));
+    } catch (error) {
+      console.error('[v0] Error:', error);
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'text/plain');
+      res.end('Internal Server Error');
+    }
+  };
+})();
 WRAPPER_EOF
 
 # Copy server files to Vercel function
@@ -56,7 +52,7 @@ cp -r dist/client .vercel/output/static
 cat > .vercel/output/functions/index.func/.vc-config.json << 'EOF'
 {
   "runtime": "nodejs20.x",
-  "handler": "index.mjs",
+  "handler": "index.js",
   "launcherType": "Nodejs"
 }
 EOF
