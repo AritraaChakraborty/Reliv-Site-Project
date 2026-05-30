@@ -8,39 +8,47 @@ bun run build
 mkdir -p .vercel/output/functions/index.func
 
 # Create a CommonJS wrapper that works with Vercel's Node.js runtime
-# This uses the proper module.exports format Vercel expects
+# Load the server module at startup and export the handler immediately
 cat > .vercel/output/functions/index.func/index.js << 'WRAPPER_EOF'
-(async () => {
-  const server = await import('./server.js');
-  
-  module.exports = async (req, res) => {
-    try {
-      const protocol = req.headers['x-forwarded-proto'] || 'http';
-      const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
-      const url = new URL(req.url || '/', `${protocol}://${host}`);
-      
-      const request = new Request(url.toString(), {
-        method: req.method,
-        headers: req.headers,
-      });
-      
-      const response = await server.default.fetch(request);
-      
-      res.statusCode = response.status;
-      response.headers.forEach((value, name) => {
-        res.setHeader(name, value);
-      });
-      
-      const buffer = await response.arrayBuffer();
-      res.end(Buffer.from(buffer));
-    } catch (error) {
-      console.error('[v0] Error:', error);
-      res.statusCode = 500;
-      res.setHeader('Content-Type', 'text/plain');
-      res.end('Internal Server Error');
-    }
-  };
-})();
+let serverModule = null;
+
+async function initServer() {
+  if (!serverModule) {
+    serverModule = await import('./server.js');
+  }
+  return serverModule;
+}
+
+// Export the handler function that Vercel will call
+module.exports = async (req, res) => {
+  try {
+    const server = await initServer();
+    
+    const protocol = req.headers['x-forwarded-proto'] || 'http';
+    const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
+    const url = new URL(req.url || '/', `${protocol}://${host}`);
+    
+    const request = new Request(url.toString(), {
+      method: req.method,
+      headers: req.headers,
+    });
+    
+    const response = await server.default.fetch(request);
+    
+    res.statusCode = response.status;
+    response.headers.forEach((value, name) => {
+      res.setHeader(name, value);
+    });
+    
+    const buffer = await response.arrayBuffer();
+    res.end(Buffer.from(buffer));
+  } catch (error) {
+    console.error('[v0] Server error:', error);
+    res.statusCode = 500;
+    res.setHeader('Content-Type', 'text/plain');
+    res.end('Internal Server Error');
+  }
+};
 WRAPPER_EOF
 
 # Copy server files to Vercel function
