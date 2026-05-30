@@ -21,12 +21,18 @@ cp -r dist/server/_libs .vercel/output/functions/index.func/
 cp -r dist/server/_ssr .vercel/output/functions/index.func/
 cp -r dist/server/_chunks .vercel/output/functions/index.func/ 2>/dev/null || true
 
-# Create a proper Vercel-compatible handler using .mjs
-cat > .vercel/output/functions/index.func/index.mjs << 'HANDLER_EOF'
-import server from './server.mjs';
+# Create a proper Vercel-compatible handler using CommonJS that can import ESM
+cat > .vercel/output/functions/index.func/index.js << 'HANDLER_EOF'
+let server = null;
 
-export default async (req, res) => {
+module.exports = async (req, res) => {
   try {
+    // Lazy load the server on first request
+    if (!server) {
+      const serverModule = await import('./server.mjs');
+      server = serverModule.default;
+    }
+    
     // Build full request URL
     const protocol = req.headers['x-forwarded-proto'] || 'http';
     const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
@@ -63,7 +69,7 @@ HANDLER_EOF
 cat > .vercel/output/functions/index.func/.vc-config.json << 'CONFIG_EOF'
 {
   "runtime": "nodejs20.x",
-  "handler": "index.mjs",
+  "handler": "index.js",
   "launcherType": "Nodejs"
 }
 CONFIG_EOF
